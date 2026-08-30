@@ -100,6 +100,18 @@
             try {
                 const response = await fetch(GOOGLE_SHEET_CSV_URL);
                 const csvText = await response.text();
+                
+                // 🔥 攔截 N1 日期的數位扒手邏輯
+                const lines = csvText.split('\n');
+                if (lines.length > 0) {
+                    const headers = parseCSVLine(lines[0]);
+                    // N欄對應陣列索引13
+                    const updateDate = headers[13]; 
+                    if (updateDate && updateDate.trim() !== '') {
+                        document.querySelector('.subtitle').innerText = `內部專用快速檢索系統 (最後更新：${updateDate.trim()})`;
+                    }
+                }
+                
                 products = parseCSV(csvText);
                 
                 document.getElementById('loader').style.display = 'none';
@@ -203,7 +215,6 @@
                 return;
             }
             list.forEach(p => {
-                // 暴力清除屬性名稱空白的容錯機制
                 const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
                 
                 const sku = getVal('SKU') || 'N/A';
@@ -226,7 +237,7 @@
                 
                 const category = getVal('商品分類') || '無分類';
                 
-                // 完整保留「廠編-廠商名」，不再自作聰明亂切
+                // 完整保留「廠編-廠商名」
                 const vendor = getVal('廠商') || '';
 
                 const card = document.createElement('div');
