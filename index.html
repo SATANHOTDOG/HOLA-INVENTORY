@@ -42,7 +42,7 @@
         .price-label { color: var(--text-muted); }
         .price-orig { text-decoration: line-through; color: #95a5a6; }
         .price-promo { color: var(--accent-color); font-weight: bold; font-size: 1.1rem; }
-        .promo-period { font-size: 0.75rem; color: var(--accent-color); background: #fdf2f2; padding: 4px 8px; border-radius: 4px; margin-top: 4px; line-height: 1.3; }
+        .promo-period { font-size: 0.75rem; color: var(--accent-color); background: #fdf2f2; padding: 4px 8px; border-radius: 4px; margin-top: 4px; line-height: 1.3; font-weight: bold; }
         .info-row { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; display: flex; justify-content: space-between; }
         .action-btns { display: flex; gap: 6px; }
         .btn { flex: 1; text-align: center; padding: 10px 0; border-radius: 6px; font-size: 0.9rem; text-decoration: none; font-weight: bold; transition: background 0.2s; cursor: pointer; border: none; }
@@ -139,14 +139,48 @@
             return values.map(v => v.replace(/^["']|["']$/g, ''));
         }
 
+        // ⚔️ 特價大逃殺演算法：無情剃除無效檔期，只留今天最急迫的破盤價
+        function getActiveShortestPromo(promoPriceStr, promoPeriodStr) {
+            if (!promoPriceStr || !promoPeriodStr) return { price: '', period: '' };
+            
+            const prices = promoPriceStr.split('|').map(s => s.trim());
+            const periods = promoPeriodStr.split('|').map(s => s.trim());
+            
+            if (prices.length !== periods.length || periods.length === 1) {
+                return { price: prices[0] || '', period: periods[0] || '' };
+            }
+
+            const now = new Date(); 
+            let bestPromo = null;
+            let minDuration = Infinity;
+
+            for (let i = 0; i < periods.length; i++) {
+                const parts = periods[i].split('~');
+                if (parts.length === 2) {
+                    const start = new Date(parts[0].trim().replace(/\//g, '-') + "T00:00:00");
+                    const end = new Date(parts[1].trim().replace(/\//g, '-') + "T23:59:59");
+
+                    if (now >= start && now <= end) {
+                        const duration = end - start; 
+                        if (duration < minDuration) {
+                            minDuration = duration;
+                            bestPromo = { price: prices[i], period: periods[i] };
+                        }
+                    }
+                }
+            }
+            return bestPromo || { price: '', period: '' };
+        }
+
         function filterAndRender() {
             const query = document.getElementById('searchInput').value.toLowerCase().trim();
             const onlyYangmei = document.getElementById('stockFilter').checked;
 
             const filtered = products.filter(p => {
-                const sku = (p['SKU'] || '').toLowerCase();
-                const name = (p['商品名稱'] || '').toLowerCase();
-                const ymStock = parseInt(p['楊梅庫存'] || '0');
+                const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
+                const sku = getVal('SKU').toLowerCase();
+                const name = getVal('商品名稱').toLowerCase();
+                const ymStock = parseInt(getVal('楊梅庫存') || '0');
 
                 const matchText = sku.includes(query) || name.includes(query);
                 const matchStock = onlyYangmei ? (ymStock > 0) : true;
@@ -169,16 +203,31 @@
                 return;
             }
             list.forEach(p => {
-                const sku = p['SKU'] || 'N/A';
-                const name = p['商品名稱'] || '無品名';
-                const ymStock = parseInt(p['楊梅庫存'] || '0');
-                const h630Stock = parseInt(p['HOLA630庫存'] || '0');
-                const h630Show = parseInt(p['HOLA630展示'] || '0');
-                const origPrice = p['一般售價'] || '0';
-                const promoPrice = p['促銷售價'] || '';
-                const promoPeriod = p['促銷期間'] || '';
-                const category = p['商品分類'] || '無分類';
-                const vendor = p['廠商'] || '';
+                // 暴力清除屬性名稱空白的容錯機制
+                const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
+                
+                const sku = getVal('SKU') || 'N/A';
+                const name = getVal('商品名稱') || '無品名';
+                const ymStock = parseInt(getVal('楊梅庫存') || '0');
+                const h630Stock = parseInt(getVal('HOLA630庫存') || '0');
+                const h630Show = parseInt(getVal('HOLA630展示') || '0');
+                const origPrice = getVal('一般售價') || '0';
+                
+                let rawPromoPrice = getVal('促銷售價');
+                if(rawPromoPrice === '#N/A' || rawPromoPrice === '0') rawPromoPrice = '';
+                
+                let rawPromoPeriod = getVal('促銷期間');
+                if(rawPromoPeriod === '#N/A') rawPromoPeriod = '';
+
+                // 🔥 啟動演算法，只留下今天該出現的價格
+                const activePromo = getActiveShortestPromo(rawPromoPrice, rawPromoPeriod);
+                const promoPrice = activePromo.price;
+                const promoPeriod = activePromo.period;
+                
+                const category = getVal('商品分類') || '無分類';
+                
+                // 完整保留「廠編-廠商名」，不再自作聰明亂切
+                const vendor = getVal('廠商') || '';
 
                 const card = document.createElement('div');
                 card.className = 'card';
@@ -195,12 +244,12 @@
                         </div>
                         <div class="price-section">
                             <div class="price-row"><span class="price-label">一般售價</span><span class="${promoPrice ? 'price-orig' : 'price-promo'}">$${origPrice}</span></div>
-                            ${promoPrice ? `<div class="price-row"><span class="price-label">促銷售價</span><span class="price-promo">$${promoPrice}</span></div>` : ''}
-                            ${promoPeriod ? `<div class="promo-period">⏱️ 檔期: ${promoPeriod}</div>` : ''}
+                            ${promoPrice ? `<div class="price-row"><span class="price-label">現在特價</span><span class="price-promo">$${promoPrice}</span></div>` : ''}
+                            ${promoPeriod ? `<div class="promo-period">⏱️ 最終檔期: ${promoPeriod}</div>` : ''}
                         </div>
                         <div class="info-row">
                             <span>分類: ${category}</span>
-                            ${vendor ? `<span>廠商: ${vendor.split('-')[1] || vendor}</span>` : ''}
+                            ${vendor ? `<span>廠商: ${vendor}</span>` : ''}
                         </div>
                     </div>
                     <div class="action-btns">
