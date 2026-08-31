@@ -23,9 +23,9 @@
         .search-container { position: sticky; top: 10px; z-index: 100; margin-bottom: 20px; background: var(--bg-color); padding-bottom: 10px; }
         .search-box { width: 100%; padding: 14px 20px; font-size: 1.1rem; border: 2px solid var(--primary-color); border-radius: 12px; outline: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: all 0.2s ease; background: #ffffff; }
         .search-box:focus { border-color: var(--accent-color); box-shadow: 0 4px 16px rgba(231, 76, 60, 0.2); }
-        .filter-bar { margin-top: 12px; display: flex; align-items: center; padding: 0 5px; }
-        .checkbox-container { display: flex; align-items: center; cursor: pointer; font-size: 1rem; color: var(--primary-color); font-weight: 600; user-select: none; }
-        .checkbox-container input { margin-right: 8px; width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent-color); }
+        .filter-bar { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 12px; padding: 0 5px; }
+        .checkbox-container { display: flex; align-items: center; cursor: pointer; font-size: 0.95rem; color: var(--primary-color); font-weight: 600; user-select: none; }
+        .checkbox-container input { margin-right: 6px; width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-color); }
         .status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px; padding: 0 5px; }
         .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; }
         .card { background: var(--card-bg); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); box-shadow: 0 2px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
@@ -70,7 +70,11 @@
         <div class="filter-bar">
             <label class="checkbox-container">
                 <input type="checkbox" id="stockFilter">
-                ⚡ 只顯示楊梅有現貨 (過濾零庫存)
+                ⚡ 楊梅有現貨
+            </label>
+            <label class="checkbox-container">
+                <input type="checkbox" id="shopFilter">
+                🏪 店內有庫存/展示 (630現貨或展示>0)
             </label>
         </div>
     </div>
@@ -101,11 +105,10 @@
                 const response = await fetch(GOOGLE_SHEET_CSV_URL);
                 const csvText = await response.text();
                 
-                // 🔥 攔截 N1 日期的數位扒手邏輯
+                // 攔截 N1 日期的邏輯
                 const lines = csvText.split('\n');
                 if (lines.length > 0) {
                     const headers = parseCSVLine(lines[0]);
-                    // N欄對應陣列索引13
                     const updateDate = headers[13]; 
                     if (updateDate && updateDate.trim() !== '') {
                         document.querySelector('.subtitle').innerText = `內部專用快速檢索系統 (最後更新：${updateDate.trim()})`;
@@ -151,7 +154,6 @@
             return values.map(v => v.replace(/^["']|["']$/g, ''));
         }
 
-        // ⚔️ 特價大逃殺演算法：無情剃除無效檔期，只留今天最急迫的破盤價
         function getActiveShortestPromo(promoPriceStr, promoPeriodStr) {
             if (!promoPriceStr || !promoPeriodStr) return { price: '', period: '' };
             
@@ -187,20 +189,24 @@
         function filterAndRender() {
             const query = document.getElementById('searchInput').value.toLowerCase().trim();
             const onlyYangmei = document.getElementById('stockFilter').checked;
+            const onlyShop = document.getElementById('shopFilter').checked;
 
             const filtered = products.filter(p => {
                 const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
                 const sku = getVal('SKU').toLowerCase();
                 const name = getVal('商品名稱').toLowerCase();
                 const ymStock = parseInt(getVal('楊梅庫存') || '0');
+                const h630Stock = parseInt(getVal('HOLA630庫存') || '0');
+                const h630Show = parseInt(getVal('HOLA630展示') || '0');
 
                 const matchText = sku.includes(query) || name.includes(query);
-                const matchStock = onlyYangmei ? (ymStock > 0) : true;
+                const matchYangmei = onlyYangmei ? (ymStock > 0) : true;
+                const matchShop = onlyShop ? (h630Stock > 0 || h630Show > 0) : true;
 
-                return matchText && matchStock;
+                return matchText && matchYangmei && matchShop;
             });
 
-            document.getElementById('dataCount').innerText = query || onlyYangmei 
+            document.getElementById('dataCount').innerText = query || onlyYangmei || onlyShop 
                 ? `過濾結果：${filtered.length} 筆` 
                 : `共載入 ${products.length} 筆商品資料`;
                 
@@ -211,7 +217,7 @@
             const container = document.getElementById('gridContainer');
             container.innerHTML = '';
             if (list.length === 0) {
-                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #888; font-size: 1.2rem;">查無符合的商品資料，你要不要去問問企劃部是不是又把 SKU 換了？</div>';
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #888; font-size: 1.2rem;">查無符合條件的商品，要不要叫客人直接買樣品走？</div>';
                 return;
             }
             list.forEach(p => {
@@ -230,14 +236,11 @@
                 let rawPromoPeriod = getVal('促銷期間');
                 if(rawPromoPeriod === '#N/A') rawPromoPeriod = '';
 
-                // 🔥 啟動演算法，只留下今天該出現的價格
                 const activePromo = getActiveShortestPromo(rawPromoPrice, rawPromoPeriod);
                 const promoPrice = activePromo.price;
                 const promoPeriod = activePromo.period;
                 
                 const category = getVal('商品分類') || '無分類';
-                
-                // 完整保留「廠編-廠商名」
                 const vendor = getVal('廠商') || '';
 
                 const card = document.createElement('div');
@@ -275,6 +278,7 @@
 
         document.getElementById('searchInput').addEventListener('input', filterAndRender);
         document.getElementById('stockFilter').addEventListener('change', filterAndRender);
+        document.getElementById('shopFilter').addEventListener('change', filterAndRender);
 
         function showQR(sku) {
             document.getElementById('modalTitle').innerText = `${sku}`;
