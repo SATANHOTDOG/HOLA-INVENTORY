@@ -100,13 +100,14 @@
         const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTC18jsseZH3TerLqZMzzkJc1uPjh2IVTktcs4DxiuEmpA_NRAnzKrgzZbV43FQtN8b7-vMlvv1BFGF/pub?gid=0&single=true&output=csv';
 
         let products = [];
+        let currentFiltered = [];
+        let renderLimit = 100; // 🔥 初始渲染封印值
 
         async function fetchProducts() {
             try {
                 const response = await fetch(GOOGLE_SHEET_CSV_URL);
                 const csvText = await response.text();
                 
-                // 攔截 N1 日期的邏輯
                 const lines = csvText.split('\n');
                 if (lines.length > 0) {
                     const headers = parseCSVLine(lines[0]);
@@ -157,24 +158,19 @@
 
         function getActiveShortestPromo(promoPriceStr, promoPeriodStr) {
             if (!promoPriceStr || !promoPeriodStr) return { price: '', period: '' };
-            
             const prices = promoPriceStr.split('|').map(s => s.trim());
             const periods = promoPeriodStr.split('|').map(s => s.trim());
-            
             if (prices.length !== periods.length || periods.length === 1) {
                 return { price: prices[0] || '', period: periods[0] || '' };
             }
-
             const now = new Date(); 
             let bestPromo = null;
             let minDuration = Infinity;
-
             for (let i = 0; i < periods.length; i++) {
                 const parts = periods[i].split('~');
                 if (parts.length === 2) {
                     const start = new Date(parts[0].trim().replace(/\//g, '-') + "T00:00:00");
                     const end = new Date(parts[1].trim().replace(/\//g, '-') + "T23:59:59");
-
                     if (now >= start && now <= end) {
                         const duration = end - start; 
                         if (duration < minDuration) {
@@ -192,7 +188,7 @@
             const onlyYangmei = document.getElementById('stockFilter').checked;
             const onlyShop = document.getElementById('shopFilter').checked;
 
-            const filtered = products.filter(p => {
+            currentFiltered = products.filter(p => {
                 const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
                 const sku = getVal('SKU').toLowerCase();
                 const name = getVal('商品名稱').toLowerCase();
@@ -208,20 +204,27 @@
             });
 
             document.getElementById('dataCount').innerText = query || onlyYangmei || onlyShop 
-                ? `過濾結果：${filtered.length} 筆` 
+                ? `過濾結果：${currentFiltered.length} 筆` 
                 : `共載入 ${products.length} 筆商品資料`;
-                
-            renderProducts(filtered.slice(0, 100));
+            
+            // 每次重新搜尋，把顯示數量重置回 100 筆
+            renderLimit = 100;
+            renderProducts();
         }
 
-        function renderProducts(list) {
+        function renderProducts() {
             const container = document.getElementById('gridContainer');
             container.innerHTML = '';
-            if (list.length === 0) {
+            
+            // 🔥 只切出目前的額度來渲染
+            const listToRender = currentFiltered.slice(0, renderLimit);
+
+            if (listToRender.length === 0) {
                 container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #888; font-size: 1.2rem;">查無符合條件的商品，要不要叫客人直接買樣品走？</div>';
                 return;
             }
-            list.forEach(p => {
+
+            listToRender.forEach(p => {
                 const getVal = (key) => p[key] || p[` ${key}`] || p[`${key} `] || p[Object.keys(p).find(k => k.trim() === key)] || '';
                 
                 const sku = getVal('SKU') || 'N/A';
@@ -275,6 +278,21 @@
                 `;
                 container.appendChild(card);
             });
+
+            // 🔥 如果庫存清單比目前顯示的額度還要多，就在最底下召喚「載入更多」按鈕
+            if (renderLimit < currentFiltered.length) {
+                const btnDiv = document.createElement('div');
+                btnDiv.style = "grid-column: 1/-1; text-align: center; padding: 10px;";
+                const remaining = currentFiltered.length - renderLimit;
+                btnDiv.innerHTML = `<button class="btn btn-secondary" style="width: 100%; padding: 15px; font-weight: bold; font-size: 1.1rem; border: 2px dashed #95a5a6; background: #eef2f7;" onclick="loadMore()">⬇️ 還有 ${remaining} 筆沒顯示，點我繼續往下挖</button>`;
+                container.appendChild(btnDiv);
+            }
+        }
+
+        // 🔥 解除封印的法術
+        function loadMore() {
+            renderLimit += 100;
+            renderProducts();
         }
 
         document.getElementById('searchInput').addEventListener('input', filterAndRender);
