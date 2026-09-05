@@ -296,7 +296,7 @@
         
         fetchProducts();
 
-        // 📷 鏡頭掃描核心邏輯 (強制後鏡頭 + 強制連續對焦版)
+        // 📷 鏡頭掃描核心邏輯 (退回安全後鏡頭版，移除拘束器)
         let html5QrCode;
         document.getElementById('scanBtn').addEventListener('click', function() {
             const readerDiv = document.getElementById('reader');
@@ -316,15 +316,12 @@
             btn.innerText = '❌ 關閉掃描鏡頭';
 
             html5QrCode = new Html5Qrcode("reader");
+            
+            // 移除 advanced 拘束器，單純呼叫後鏡頭
             html5QrCode.start(
-                { 
-                    facingMode: "environment",
-                    // 🔥 拿電擊器強制喚醒硬體的連續自動對焦馬達
-                    advanced: [{ focusMode: "continuous" }] 
-                }, 
+                { facingMode: "environment" }, 
                 { 
                     fps: 10, 
-                    // 移除死板的固定大小，改用相對比例，逼你把手拿遠一點
                     qrbox: function(viewfinderWidth, viewfinderHeight) {
                         return {
                             width: viewfinderWidth * 0.7,
@@ -338,7 +335,7 @@
                         const targetSku = skuMatch[1];
                         let searchBox = document.getElementById('searchInput');
                         searchBox.value = targetSku;
-                        searchBox.dispatchEvent(new Event('input')); // 強制觸發搜尋
+                        searchBox.dispatchEvent(new Event('input')); 
                         
                         html5QrCode.stop().then(() => {
                             readerDiv.style.display = 'none';
@@ -347,11 +344,11 @@
                     }
                 },
                 function(errorMessage) {
-                    // 對焦時的雜訊，略過
+                    // 背景雜訊略過
                 }
             ).catch(err => {
                 console.error("無法開啟相機:", err);
-                alert("相機喚醒失敗，請確認是否給予權限或重新整理網頁。");
+                alert("相機喚醒失敗，請確認是否給予瀏覽器鏡頭權限。");
                 readerDiv.style.display = 'none';
                 btn.innerText = '📷 開啟鏡頭掃描價標';
             });
