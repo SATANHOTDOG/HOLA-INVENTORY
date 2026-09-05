@@ -58,8 +58,6 @@
         .modal-content img { width: 300px; height: 300px; margin: 15px 0; border: 1px solid #eee; border-radius: 8px; padding: 10px; background: #fff; }
         .loader { text-align: center; padding: 50px; font-size: 1.2rem; color: var(--text-muted); }
     </style>
-    <!-- 🔥 掛載 html5-qrcode 天眼套件 -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
     <header>
@@ -80,10 +78,6 @@
                 🏪 店內有庫存/展示 (630現貨或展示>0)
             </label>
         </div>
-
-        <!-- 📷 掃描器 UI 介面 -->
-        <button id="scanBtn" class="btn btn-secondary" style="width: 100%; margin-top: 15px; margin-bottom: 5px; font-weight: bold; background: #34495e; color: white; padding: 12px;">📷 開啟鏡頭掃描價標</button>
-        <div id="reader" style="width: 100%; margin-bottom: 10px; display: none; border-radius: 12px; overflow: hidden; border: 2px solid #2c3e50;"></div>
     </div>
 
     <div class="status-bar">
@@ -295,68 +289,6 @@
         function closeModal() { document.getElementById('qrModal').style.display = 'none'; }
         
         fetchProducts();
-
-        // 📷 鏡頭掃描核心邏輯 (強制高清喚醒主鏡頭版)
-        let html5QrCode;
-        document.getElementById('scanBtn').addEventListener('click', function() {
-            const readerDiv = document.getElementById('reader');
-            const btn = this;
-            
-            if (readerDiv.style.display === 'block') {
-                if (html5QrCode) {
-                    html5QrCode.stop().then(() => {
-                        readerDiv.style.display = 'none';
-                        btn.innerText = '📷 開啟鏡頭掃描價標';
-                    }).catch(err => console.log('關閉鏡頭失敗', err));
-                }
-                return;
-            }
-
-            readerDiv.style.display = 'block';
-            btn.innerText = '❌ 關閉掃描鏡頭';
-
-            html5QrCode = new Html5Qrcode("reader");
-            
-            // 🔥 移除會當機的拘束器，改用「強制要求 HD 高畫質」來逼迫硬體啟動較好的主鏡頭模組
-            html5QrCode.start(
-                { 
-                    facingMode: "environment",
-                    width: { ideal: 1280 }, 
-                    height: { ideal: 720 }
-                }, 
-                { 
-                    fps: 10, 
-                    qrbox: function(viewfinderWidth, viewfinderHeight) {
-                        return {
-                            width: viewfinderWidth * 0.7,
-                            height: viewfinderHeight * 0.7
-                        };
-                    }
-                },
-                function(decodedText) {
-                    const skuMatch = decodedText.match(/(\d{8,10})/);
-                    if (skuMatch && skuMatch[1]) {
-                        const targetSku = skuMatch[1];
-                        let searchBox = document.getElementById('searchInput');
-                        searchBox.value = targetSku;
-                        searchBox.dispatchEvent(new Event('input')); 
-                        
-                        html5QrCode.stop().then(() => {
-                            readerDiv.style.display = 'none';
-                            btn.innerText = '📷 開啟鏡頭掃描價標';
-                        });
-                    }
-                },
-                function(errorMessage) {
-                    // 背景雜訊略過
-                }
-            ).catch(err => {
-                console.error("無法開啟相機:", err);
-                alert("相機喚醒失敗，請確認是否給予瀏覽器鏡頭權限。");
-                readerDiv.style.display = 'none';
-                btn.innerText = '📷 開啟鏡頭掃描價標';
-            });
-        });
     </script>
 </body>
 </html>
