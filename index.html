@@ -296,13 +296,12 @@
         
         fetchProducts();
 
-        // 📷 鏡頭掃描核心邏輯 (強制後鏡頭版)
+        // 📷 鏡頭掃描核心邏輯 (強制後鏡頭 + 強制連續對焦版)
         let html5QrCode;
         document.getElementById('scanBtn').addEventListener('click', function() {
             const readerDiv = document.getElementById('reader');
             const btn = this;
             
-            // 如果鏡頭已經開著，就無情拔除
             if (readerDiv.style.display === 'block') {
                 if (html5QrCode) {
                     html5QrCode.stop().then(() => {
@@ -313,17 +312,27 @@
                 return;
             }
 
-            // 展開掃描結界
             readerDiv.style.display = 'block';
             btn.innerText = '❌ 關閉掃描鏡頭';
 
-            // 直接呼叫底層 API，繞過預設的白痴鏡頭選擇邏輯
             html5QrCode = new Html5Qrcode("reader");
             html5QrCode.start(
-                { facingMode: "environment" }, // 🔥 強制調用後方的環境鏡頭
-                { fps: 10, qrbox: { width: 250, height: 250 } },
+                { 
+                    facingMode: "environment",
+                    // 🔥 拿電擊器強制喚醒硬體的連續自動對焦馬達
+                    advanced: [{ focusMode: "continuous" }] 
+                }, 
+                { 
+                    fps: 10, 
+                    // 移除死板的固定大小，改用相對比例，逼你把手拿遠一點
+                    qrbox: function(viewfinderWidth, viewfinderHeight) {
+                        return {
+                            width: viewfinderWidth * 0.7,
+                            height: viewfinderHeight * 0.7
+                        };
+                    }
+                },
                 function(decodedText) {
-                    // 用暴力正則表達式把連續 8 到 10 位的數字挖出來
                     const skuMatch = decodedText.match(/(\d{8,10})/);
                     if (skuMatch && skuMatch[1]) {
                         const targetSku = skuMatch[1];
@@ -331,7 +340,6 @@
                         searchBox.value = targetSku;
                         searchBox.dispatchEvent(new Event('input')); // 強制觸發搜尋
                         
-                        // 掃到就立刻關閉鏡頭，過河拆橋
                         html5QrCode.stop().then(() => {
                             readerDiv.style.display = 'none';
                             btn.innerText = '📷 開啟鏡頭掃描價標';
@@ -339,11 +347,11 @@
                     }
                 },
                 function(errorMessage) {
-                    // 對焦雜訊，當作沒看到
+                    // 對焦時的雜訊，略過
                 }
             ).catch(err => {
-                console.error("無法開啟後鏡頭:", err);
-                alert("抓不到後鏡頭，請確認瀏覽器相機權限，或手機系統是否卡陰！");
+                console.error("無法開啟相機:", err);
+                alert("相機喚醒失敗，請確認是否給予權限或重新整理網頁。");
                 readerDiv.style.display = 'none';
                 btn.innerText = '📷 開啟鏡頭掃描價標';
             });
