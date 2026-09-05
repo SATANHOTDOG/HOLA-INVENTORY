@@ -296,7 +296,7 @@
         
         fetchProducts();
 
-        // 📷 鏡頭掃描核心邏輯 (退回安全後鏡頭版，移除拘束器)
+        // 📷 鏡頭掃描核心邏輯 (強制高清喚醒主鏡頭版)
         let html5QrCode;
         document.getElementById('scanBtn').addEventListener('click', function() {
             const readerDiv = document.getElementById('reader');
@@ -317,9 +317,13 @@
 
             html5QrCode = new Html5Qrcode("reader");
             
-            // 移除 advanced 拘束器，單純呼叫後鏡頭
+            // 🔥 移除會當機的拘束器，改用「強制要求 HD 高畫質」來逼迫硬體啟動較好的主鏡頭模組
             html5QrCode.start(
-                { facingMode: "environment" }, 
+                { 
+                    facingMode: "environment",
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 }
+                }, 
                 { 
                     fps: 10, 
                     qrbox: function(viewfinderWidth, viewfinderHeight) {
